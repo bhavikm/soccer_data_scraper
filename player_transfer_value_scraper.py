@@ -56,9 +56,13 @@ def extract_team_links(year):
     links = soup.select("a.vereinprofil_tooltip")
 
     # We need the location that the link is pointing to, so for each link, take the link location.
-    # Additionally, we only need the links in locations 1,3,5,etc. of our list, so loop through those only
-    for i in range(1, 41, 2):
+    for i in range(len(links)):
         teamLinks.append(links[i].get("href"))
+        
+    # Remove repeats and un-needed links
+    teamLinks = list(set(teamLinks))
+    pattern = re.compile('startseite')
+    teamLinks = [s for s in teamLinks if pattern.search(s) ]
 
     # For each location that we have taken, add the website before it - this allows us to call it later
     for i in range(len(teamLinks)):
@@ -409,7 +413,8 @@ def main():
     ]
     for year in tqdm.tqdm(years):
         year_team_links, team_player_links = load_scrape_year_links(year)
-
+        pprint(year)
+        
         for team, player_links in team_player_links.items():
             for player_link in player_links:
                 extracted_player_data = load_scrape_player_data(player_link)
@@ -433,7 +438,7 @@ def main():
                         extracted_player_data['position'],
                         player_link
                     ]
-                    pprint(row)
+                    #pprint(row)
                     row_data.append(row)
 
     # output final CSV
