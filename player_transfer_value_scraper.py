@@ -473,6 +473,123 @@ def output_player_market_value_history():
         writer = csv.writer(f)
         writer.writerows(row_data)
 
+def get_player_actual_transfer_history(profile_link):
+    """ scrape the actual transfer history from player profile link"""
+    if profile_link is not None:
+        # Get the player's profile page
+        soup = get_page_soup(profile_link)
+        
+        # get the actual transfer table
+        transfer_table = soup.find('div', attrs={'class': 'box transferhistorie'})
+        if transfer_table is not None:
+          transfer_table = transfer_table.find('table')
+          
+          # get the table rows
+          table_rows = transfer_table.find_all('tr')
+          # ignore last row
+          table_rows.pop()
+          
+          transfer_data = []
+
+          # Extract the player's data
+          for tr in table_rows:
+              th = tr.find_all('th')
+              td = tr.find_all('td')
+              header = [th.text for th in th]
+              data = [tr.text for tr in td]
+              row = header + data
+
+              row_stripped = []
+              for i in range(len(row)):
+                  row_stripped.append(row[i].strip().encode('ascii', 'ignore').decode('utf-8').replace(',',''))
+
+              pattern = re.compile('^Date')
+              if not pattern.match(row_stripped[0]):
+                  row_stripped.pop()
+                  transfer_data.append(row_stripped)
+                  
+          return transfer_data
+        else:
+          return None
+    else:
+        return None
+
+def get_actual_player_transfer_history_using_links_cache(overwrite_cache = False):
+    """Get unique player links and scrape actual transfer history, save to cache and format to csv"""
+    try:
+        with open('links_cache.pickle', 'rb') as handle:
+            links_cache = pickle.load(handle)
+    except FileNotFoundError:
+        pprint('No links cache')
+        return None
+    
+    if overwrite_cache:
+        pprint('starting new cache')
+        actual_transfer_cache = {}
+    else:
+        try:
+            with open('actual_transfer_cache.pickle', 'rb') as handle:
+                actual_transfer_cache = pickle.load(handle)
+        except FileNotFoundError:
+             pprint('starting new cache')
+             actual_transfer_cache = {}
+                
+    # extract tables using links cache and save in new cache
+    years = list(links_cache.keys())
+    for year in years:
+        pprint(year)
+        teams = list(links_cache[year]['team_player_links'].keys())
+        for team in teams:
+            pprint(team)
+            player_links = links_cache[year]['team_player_links'][team]
+            for player_link in player_links:
+                player_link = f"https://www.transfermarkt.co.uk{player_link}"
+                if player_link not in actual_transfer_cache or actual_transfer_cache[player_link] is None:
+                    pprint(player_link)
+                    actual_transfer_cache[player_link] = get_player_actual_transfer_history(player_link)
+                    # save cache after each new player
+                    with open('actual_transfer_cache.pickle', 'wb') as handle:
+                        pickle.dump(actual_transfer_cache, handle, protocol=pickle.HIGHEST_PROTOCOL)
+    
+    pprint('scraping done')
+    # save cache
+    with open('actual_transfer_cache.pickle', 'wb') as handle:
+        pickle.dump(actual_transfer_cache, handle, protocol=pickle.HIGHEST_PROTOCOL)
+    
+    # format data for output
+    row_data = [
+        ['Player link',
+         'Season',
+         'Date',
+         'Left',
+         'From club',
+         'Joined',
+         'To club',
+         'MV',
+         'Fee']]
+
+    players = list(actual_transfer_cache.keys())
+    for player in players:
+        data = actual_transfer_cache[player]
+        if data is not None:
+          if len(data) > 1:
+              for i in range(1,len(data)):
+                  if len(data[i]) == 12:
+                      data_keep = [
+                          data[i][0],
+                          data[i][1],
+                          data[i][4],
+                          data[i][5],
+                          data[i][8],
+                          data[i][9],
+                          data[i][10],
+                          data[i][11]
+                      ]
+                      row_data.append([player] + data_keep)
+                    
+    with open(f'actual_transfer_history.csv', 'w', newline='', encoding='utf8') as f:
+        writer = csv.writer(f)
+        writer.writerows(row_data)
 
 if __name__ == '__main__':
     main()
